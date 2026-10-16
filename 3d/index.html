@@ -1,0 +1,81 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Brad's Big Bridle Board — 3D v1</title><style>
+*{box-sizing:border-box}body{font-family:system-ui,Arial;background:#0e1726;color:#eaf1fa;max-width:1150px;margin:auto;padding:16px}h1{margin:0}p,small{color:#afc0d6}main{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(280px,1fr);gap:14px}@media(max-width:850px){main{grid-template-columns:1fr}}section{background:#1c2a3e;border:1px solid #3b506c;border-radius:12px;padding:14px;margin:12px 0}svg{width:100%;height:auto;touch-action:none;background:#0b1422;border-radius:8px}label{display:block;font-size:.84rem;color:#c4d4e8;margin-top:10px}input,select,button{width:100%;background:#0c1726;color:white;border:1px solid #657992;padding:8px;border-radius:7px;font-size:1rem}button{cursor:pointer}.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}.stats{display:grid;grid-template-columns:1fr 1fr;gap:8px}.stat{background:#0c1726;border-radius:8px;padding:10px}.stat b{display:block;font-size:1.1rem;color:#fbd18c}.warn{color:#ff9aa5}.ok{color:#7ce8bd}hr{border:0;border-top:1px solid #40536a}h2{font-size:1.05rem;margin:5px 0 10px}#scene{cursor:grab}#scene:active{cursor:grabbing}.subtle{font-size:.8rem;color:#aabbd0}</style></head><body>
+<p style="margin:0 0 8px"><a href="../" style="color:#8fc5ff;text-decoration:none">← Back to Bridle Board home</a></p><h1>Brad's Big Bridle Board <span style="font-size:.55em;color:#a9bdd4">3D prototype v1.3</span></h1>
+<p>Rotatable 3D planning view • Beam bottoms 100′ 4″ • Scoreboard retracted • Center (0,0) • Dimensions in feet</p>
+<main><div><section><svg id="scene" viewBox="0 0 760 570" aria-label="Rotatable 3D bridle layout"><g id="drawing"></g></svg><small>Drag the green HOOK to move it horizontally (X/Y). Select Height drag to adjust trim height instead. Drag empty space to rotate through a full 360° and tilt above or below the arena. Scroll to zoom. This is a perspective-style 3D projection, not a CAD-verified rigging design. Dashed beam extensions indicate unverified endpoints.</small><div class="two"><div><label>View rotation</label><input id="az" type="range" min="-360" max="360" value="-40"></div><div><label>View elevation</label><input id="el" type="range" min="-89" max="89" value="30"></div></div><div class="two"><div><label>Hook drag mode</label><select id="hookMode"><option value="xy">Move X / Y</option><option value="z">Adjust height Z</option></select></div><div><label>Movement snap</label><select id="snap"><option value="0.5">½ ft</option><option value="0.25">¼ ft</option><option value="0.0833333333">1 inch</option></select></div></div><button id="resetView">Reset view</button></section><section><h2>Geometry and static forces</h2><div class="stats"><div class="stat">Leg 1 length<b id="len1"></b><span id="ang1"></span></div><div class="stat">Leg 2 length<b id="len2"></b><span id="ang2"></span></div><div class="stat">Leg 1 tension<b id="ten1">—</b></div><div class="stat">Leg 2 tension<b id="ten2">—</b></div></div><p id="forces"></p><p id="clearance"></p></section></div>
+<div><section><h2>Pickup 1</h2><label>Beam</label><select id="beam1"><option>A</option><option>B</option><option>C</option><option>D</option><option>1</option><option>2</option></select><label id="posLabel1">Position along beam (ft)</label><input type="number" id="pos1" value="-15" step=".5"></section>
+<section><h2>Pickup 2</h2><label>Beam</label><select id="beam2"><option>A</option><option>B</option><option>C</option><option>D</option><option>1</option><option>2</option></select><label id="posLabel2">Position along beam (ft)</label><input type="number" id="pos2" value="15" step=".5"></section>
+<section><h2>Bottom hook C</h2><div class="two"><div><label>X (ft)</label><input id="hx" type="number" value="0" step=".5"></div><div><label>Y (ft)</label><input id="hy" type="number" value="0" step=".5"></div></div><label>Trim height Z (ft)</label><input id="hz" type="number" value="82" step=".5"><label>Suspended weight (lb)</label><input id="weight" type="number" value="1000" min="0" step="50"><label>Clearance margin (ft)</label><input id="margin" type="number" value="1" min="0" step=".5"></section>
+<section><h2>Model assumptions</h2><p class="subtle">A/B/C/D run left–right on this overhead plan at Y = +35.5/+24/−24/−35.5 respectively; beams 1/2 run vertically on the plan at X = −24/+24. Positions along A–D use X; along 1–2 use Y. The depicted scoreboard is 41′ × 41′, main bottom 95′, lower ring bottom 90′. Main top is drawn to 110′ <strong>visually only</strong>; collision calculations stop at the provisional 100′4″ top. Lower ring geometry is also provisional. Beam extents beyond known intersections are not verified.</p><p class="subtle">Static tension is displayed only when the two 3D legs can balance a purely vertical load without an additional horizontal force. No dynamic, structural, connection, hardware, or out-of-plane restraint certification is implied. Use a qualified rigging professional to verify loads and assemblies.</p></section></div></main>
+<script>
+const $=id=>document.getElementById(id),NS='http://www.w3.org/2000/svg';
+const H=100+4/12;
+const beams={A:{axis:'x',fixed:35.5},B:{axis:'x',fixed:24},C:{axis:'x',fixed:-24},D:{axis:'x',fixed:-35.5},'1':{axis:'y',fixed:-24},'2':{axis:'y',fixed:24}};
+$('beam1').value='A';$('beam2').value='D';
+let zoom=3.7, dragging=false,last=null,dragMode='rotate';
+function el(tag,props,parent,text){let n=document.createElementNS(NS,tag);Object.entries(props).forEach(([k,v])=>n.setAttribute(k,v));if(text!==undefined)n.textContent=text;parent.appendChild(n);return n}
+function point(i){let b=beams[$('beam'+i).value],v=+$('pos'+i).value;return b.axis==='x'?[v,b.fixed,H]:[b.fixed,v,H]}
+function proj(p){let a=+$('az').value*Math.PI/180,e=+$('el').value*Math.PI/180;let [x,y,z]=p;let xx=x*Math.cos(a)-y*Math.sin(a), yy=x*Math.sin(a)+y*Math.cos(a);return [380+xx*zoom,325+(yy*Math.sin(e)-(z-75)*Math.cos(e))*zoom]}
+function line(parent,a,b,color,w=2,dash=''){let [x1,y1]=proj(a),[x2,y2]=proj(b);return el('line',{x1,y1,x2,y2,stroke:color,'stroke-width':w,'stroke-dasharray':dash},parent)}
+function text(parent,p,t,color='#e9f2ff',size=13){let [x,y]=proj(p);el('text',{x:x+6,y:y-6,fill:color,'font-size':size,'paint-order':'stroke',stroke:'#0b1422','stroke-width':3},parent,t)}
+function rect3(parent,x0,x1,y0,y1,z0,z1,color,opacity){let corners=[[x0,y0,z0],[x1,y0,z0],[x1,y1,z0],[x0,y1,z0],[x0,y0,z1],[x1,y0,z1],[x1,y1,z1],[x0,y1,z1]],edges=[[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];for(let [a,b] of edges)line(parent,corners[a],corners[b],color,1.7);let ps=[4,5,6,7].map(i=>proj(corners[i]).join(',')).join(' ');el('polygon',{points:ps,fill:color,'fill-opacity':opacity,stroke:color,'stroke-width':1},parent)}
+function fmt(ft){let n=Math.round(ft*24)/2,f=Math.floor(n/12),ins=n-12*f;return `${f}′ ${ins.toFixed(1).replace(/\.0$/,'')}″`}
+function hit(a,b,box){let lo=0,hi=1;for(let k=0;k<3;k++){let d=b[k]-a[k],mn=box[k*2],mx=box[k*2+1];if(Math.abs(d)<1e-9){if(a[k]<mn||a[k]>mx)return false}else{let t1=(mn-a[k])/d,t2=(mx-a[k])/d;lo=Math.max(lo,Math.min(t1,t2));hi=Math.min(hi,Math.max(t1,t2));if(lo>hi)return false}}return true}
+function draw(){const root=$('drawing');root.replaceChildren();let a=point(1),b=point(2),c=[+$('hx').value,+$('hy').value,+$('hz').value],m=Math.max(0,+$('margin').value||0);
+for(let k=-40;k<=40;k+=10){line(root,[k,-40,0],[k,40,0],'#23394d',1);line(root,[-40,k,0],[40,k,0],'#23394d',1)}
+line(root,[-40,0,0],[40,0,0],'#577b9b',1.7);line(root,[0,-40,0],[0,40,0],'#577b9b',1.7);
+rect3(root,-20.5,20.5,-20.5,20.5,95,110,'#f08b91',.13);
+rect3(root,-16.25,16.25,-16.25,16.25,90,95,'#e9ad6a',.12);
+for(let [name,o] of Object.entries(beams)){let start=o.axis==='x'?[-24,o.fixed,H]:[o.fixed,-35.5,H],end=o.axis==='x'?[24,o.fixed,H]:[o.fixed,35.5,H];line(root,start,end,['A','D'].includes(name)?'#b88de7':(['1','2'].includes(name)?'#edaa82':'#67c4f2'),5);if(['A','D'].includes(name)){line(root,[-35,o.fixed,H],start,'#b88de7',2,'5 5');line(root,end,[35,o.fixed,H],'#b88de7',2,'5 5')}if(['1','2'].includes(name)){line(root,[o.fixed,-41,H],start,'#edaa82',2,'5 5');line(root,end,[o.fixed,41,H],'#edaa82',2,'5 5')}text(root,o.axis==='x'?[0,o.fixed,H+2]:[o.fixed,0,H+2],name,'#ffffff',14)}
+let boxes=[[-20.5-m,20.5+m,-20.5-m,20.5+m,95-m,H+m],[-16.25-m,16.25+m,-16.25-m,16.25+m,90-m,95+m]];
+let h1=boxes.some(box=>hit(a,c,box)),h2=boxes.some(box=>hit(b,c,box));
+line(root,a,c,h1?'#fb7185':'#facc65',3);line(root,b,c,h2?'#fb7185':'#facc65',3);
+function legLabel(p,q,label){let mid=p.map((v,i)=>v*.55+q[i]*.45),len=Math.hypot(...p.map((v,i)=>v-q[i]));let [x,y]=proj(mid);let labelText=label+'  '+fmt(len);let width=labelText.length*7.5+14;el('rect',{x:x-width/2,y:y-16,width,height:24,rx:5,fill:'#111e30',stroke:'#5b7391','stroke-width':1},root);el('text',{x,y:y+1,'text-anchor':'middle',fill:'#f8e0a3','font-size':12,'font-weight':700},root,labelText);return [x,y]}
+legLabel(a,c,'L1');legLabel(b,c,'L2');
+for(let [p,label,color] of [[a,'P1','#74b6ff'],[b,'P2','#74b6ff'],[c,'HOOK','#6ee7b7']]){let [x,y]=proj(p);el('circle',{cx:x,cy:y,r:label==='HOOK'?10:6,fill:color,stroke:'#ffffff','stroke-width':1.5,'data-hook':label==='HOOK'?'yes':'no',style:label==='HOOK'?'cursor:move':''},root);text(root,p,label)}
+let len1=Math.hypot(...a.map((v,i)=>v-c[i])),len2=Math.hypot(...b.map((v,i)=>v-c[i]));
+$('len1').textContent=fmt(len1);$('len2').textContent=fmt(len2);
+$('ang1').textContent=(Math.asin(Math.abs(a[2]-c[2])/len1)*180/Math.PI||0).toFixed(1)+'° above horizontal';$('ang2').textContent=(Math.asin(Math.abs(b[2]-c[2])/len2)*180/Math.PI||0).toFixed(1)+'° above horizontal';
+let w=+$('weight').value, u=a.map((v,i)=>(v-c[i])/len1),v=b.map((q,i)=>(q-c[i])/len2),cross=u[0]*v[1]-u[1]*v[0],msg='';
+let t1=NaN,t2=NaN;
+if(!Number.isFinite(w)||w<0||!len1||!len2||a[2]<=c[2]||b[2]<=c[2])msg='Invalid weight or hook/pickup geometry.';
+else if(Math.abs(cross)>1e-7){msg='The two legs cannot balance this vertical load without a horizontal restraint (out-of-plane geometry).'}
+else {let horizontalDot=u[0]*v[0]+u[1]*v[1],horizA=Math.hypot(u[0],u[1]),horizB=Math.hypot(v[0],v[1]);if(horizA<1e-8&&horizB<1e-8){msg='Both legs are vertical: load sharing is indeterminate without a stiffness assumption.'}else if(horizA<1e-8){t2=0;t1=w/u[2]}else if(horizB<1e-8){t1=0;t2=w/v[2]}else if(horizontalDot>=0){msg='Horizontal leg forces point in the same direction; tension-only equilibrium is impossible.'}else{let ratio=horizA/horizB;t1=w/(u[2]+ratio*v[2]);t2=t1*ratio;if(t1<0||t2<0||!Number.isFinite(t1+t2)){t1=t2=NaN;msg='Tension-only equilibrium is not possible.'}}if(Number.isFinite(t1)&&Number.isFinite(t2))msg='Idealized 3D static force balance only; no dynamic or engineering safety factors.'}
+$('ten1').textContent=Number.isFinite(t1)?t1.toFixed(1)+' lbf':'—';$('ten2').textContent=Number.isFinite(t2)?t2.toFixed(1)+' lbf':'—';if(Number.isFinite(t1)&&Number.isFinite(t2)){let mid1=a.map((n,i)=>n*.55+c[i]*.45),mid2=b.map((n,i)=>n*.55+c[i]*.45);text(root,[mid1[0],mid1[1],mid1[2]-3],t1.toFixed(0)+' lbf','#bde5ff',11);text(root,[mid2[0],mid2[1],mid2[2]-3],t2.toFixed(0)+' lbf','#bde5ff',11)}
+$('forces').textContent=msg;$('forces').className=Number.isFinite(t1)?'ok':'warn';
+$('clearance').textContent=h1||h2?'⚠ Modeled scoreboard clearance zone intersects '+[h1?'leg 1':'',h2?'leg 2':''].filter(Boolean).join(' and '):'No 3D segment intersections detected with the provisional scoreboard exclusion volumes.';$('clearance').className=h1||h2?'warn':'ok';
+for(let i of [1,2]){let o=beams[$('beam'+i).value];$('posLabel'+i).textContent='Position along beam ('+(o.axis==='x'?'X':'Y')+', ft)'}
+}
+document.querySelectorAll('input,select').forEach(n=>n.addEventListener('input',draw));document.querySelectorAll('select').forEach(n=>n.addEventListener('change',draw));
+$('resetView').onclick=()=>{$('az').value=-40;$('el').value=30;zoom=3.7;draw()};
+const svg=$('scene');
+function pointerSvg(e){let p=svg.createSVGPoint();p.x=e.clientX;p.y=e.clientY;let v=p.matrixTransform(svg.getScreenCTM().inverse());return [v.x,v.y]}
+svg.addEventListener('pointerdown',e=>{dragging=true;dragMode=e.target.getAttribute('data-hook')==='yes'?'hook':'rotate';last=pointerSvg(e);svg.setPointerCapture(e.pointerId)});
+svg.addEventListener('pointermove', e => {
+  if (!dragging) return;
+  const next = pointerSvg(e);
+  const dx = next[0] - last[0], dy = next[1] - last[1];
+  if (dragMode === 'rotate') {
+    $('az').value = ((+$("az").value + dx * .5 + 360) % 720 + 720) % 720 - 360;
+    $('el').value = Math.max(-89, Math.min(89, +$('el').value + dy * .35));
+  } else {
+    const az = +$('az').value * Math.PI / 180;
+    const elev = +$('el').value * Math.PI / 180;
+    const snap = +$('snap').value;
+    const snapValue = value => Math.round(value / snap) * snap;
+    if ($('hookMode').value === 'z') {
+      const proposed = +$('hz').value - dy / (zoom * Math.cos(elev));
+      $('hz').value = snapValue(Math.max(0, Math.min(H - .1, proposed)));
+    } else {
+      const sx = dx / zoom, sy = dy / (zoom * (Math.abs(Math.sin(elev)) < .12 ? (Math.sin(elev) < 0 ? -.12 : .12) : Math.sin(elev)));
+      const moveX = sx * Math.cos(az) + sy * Math.sin(az);
+      const moveY = -sx * Math.sin(az) + sy * Math.cos(az);
+      $('hx').value = snapValue(Math.max(-40, Math.min(40, +$('hx').value + moveX)));
+      $('hy').value = snapValue(Math.max(-40, Math.min(40, +$('hy').value + moveY)));
+    }
+  }
+  last = next;
+  draw();
+});
+svg.addEventListener('pointerup',()=>dragging=false);svg.addEventListener('pointercancel',()=>dragging=false);svg.addEventListener('wheel',e=>{e.preventDefault();zoom=Math.max(1.6,Math.min(7,zoom*(e.deltaY>0?.92:1.08)));draw()},{passive:false});draw();
+</script></body></html>
